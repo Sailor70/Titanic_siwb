@@ -1,0 +1,124 @@
+---
+title: "Analiza zbioru Titanic"
+author: "Paweł Chmielarski"
+date: "14 01 2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, echo = FALSE)
+```
+
+# Analiza zbioru Titanic
+
+W niniejszym dokumencie przeprowadzona zostanie analizę zbioru danych **Titanic**, zawierającego dane statystyczne na temat pasażerów statku. Zbiór danych i jego opis dostępny jest na stronie <https://www.kaggle.com/c/titanic/data>. Wykonywana tu analiza będzie przeprowadzana na zbiorze wcześniej oczyszczonym i przetworzonym.
+
+## Cel analizy
+
+Celem analizy jest odkrycie czynników, które zaważyły na szansach przeżycia pasażerów podczas katastrofy Titanica. Poniżej przedstawiono informacje na temat zbioru.
+
+## Atrybuty zbioru
+
+Na początku załadowano oczyszczony zbiór danych oraz dla przypomnienia wyświetlono jego właściwości. Ponownie zmieniono typ danych atrybutów Survived oraz Sex na factor.
+
+```{r load_data}
+data <- read.table(file = 'TitanicCleaned.tsv', sep = '\t', header = TRUE)
+data$Survived <- as.factor(data$Survived)
+data$Sex <- as.factor(data$Sex)
+data$Pclass <- as.factor(data$Pclass)
+data$Embarked <- as.factor(data$Embarked)
+print(summary(data))
+print(sapply(data, class))
+print(head(data))
+data_length <- nrow(data)
+```
+
+## Analiza objaśniająca
+
+Z punktu widzenia analizy pod kątem czynników, które wpływ na uratowanie danej osoby interesujące wydają się przede wszystkim atrybuty `Age`, `Sex`, `Pclass`, `Fare` czy rozmiar rodziny pasażera. Analiza będzie przeprowadzana przez porównywanie liczebności poszczególnych zbiorów albo z zastosowaniem naiwnego klasyfikatora Bayesa, który jest prostą, ale skuteczną metodą do wizualizacji prawdopodobieństw metodą a priori.
+
+Zacznijmy od analizy zależności przeżycia od atrybutu `Sex`
+
+```{r Sex_survived_plot}
+library("ggplot2")
+ggplot(data=data[1:data_length,],aes(x=Sex,fill=Survived))+geom_bar()+
+  scale_fill_manual(values=c("#cc1d1d", "#35a608"))+ylab("Liczba osób")
+t<-table(data[1:data_length,]$Sex,data[1:data_length,]$Survived)
+for (i in 1:dim(t)[1]){
+    t[i,]<-t[i,]/sum(t[i,])*100
+}
+print(t)
+```
+Z powyższego wykresu wynika, że mimo że na pokładzie znajdowało się więcej mężczyzn, to zostało uratowanych więcej kobiet. Ponad 74% z wszystkich kobiet zostało uratowanych, podczas gdy jedynie 18% mężczyzn przeżyło katastrofę.
+
+Przyjrzyjmy się teraz atrybutowi Age
+
+```{r age_survived_plot}
+library("ggplot2")
+ggplot(data=data[1:data_length,],aes(x=Age,fill=Survived))+geom_histogram(binwidth = 3,position="fill")+ylab("Prawdopodobieństwo")+
+  scale_fill_manual(values=c("#cc1d1d", "#35a608"))
+```
+
+Z analizy wieku wynika, że dzieci poniżej 15 roku życia oraz seniorzy 80+ mieli większe szanse na ratunek.
+
+Następnie analizuje przeżycie w zależności od atrybutu Embarked
+
+```{r embarked_survived_plot}
+library("ggplot2")
+ggplot(data = data[1:data_length,],aes(x=Embarked,fill=Survived))+geom_bar()+
+  scale_fill_manual(values=c("#cc1d1d", "#35a608"))+ylab("Liczba osób")
+```
+Wygląda na to że największa szansa na przeżycie jest dla Embarked = "C". Najwięcej osób jednak zaokrętowanych było w porcie "S" i też największa liczba osób z tej kategorii została uratowana. Atrybut Embarked nie ma zatem jednoznacznego wpływu na wynik Survived.
+
+Teraz sprawdzam zależność typu biletu.
+
+```{r pclass_survived_plot}
+library("ggplot2")
+ggplot(data = data[1:data_length,],aes(x=Pclass,fill=Survived))+geom_bar(position="fill")+ylab("Prawdopodobieństwo")+
+  scale_fill_manual(values=c("#cc1d1d", "#35a608"))
+```
+Z wykresu wynika, że im bardziej prestiżowa klasa biletu, tym wyższa szansa na ratunek.
+
+Sprawdźmy teraz zależności przeżycia od liczby osób spokrewnionych na pokładzie. W tym celu tworzę wykresy dla SibSp, Parch, a następnie łączę obie cechy.
+
+```{r familymembers_survived_plot}
+library("ggplot2")
+ggplot(data = data[1:data_length,],aes(x=SibSp,fill=Survived))+geom_bar()+scale_fill_manual(values=c("#cc1d1d", "#35a608"))+ylab("Liczba osób")
+ggplot(data = data[1:data_length,],aes(x=Parch,fill=Survived))+geom_bar()+scale_fill_manual(values=c("#cc1d1d", "#35a608"))+ylab("Liczba osób")
+
+data$FamilySize <- data$SibSp + data$Parch +1;
+data1<-data[1:data_length,]
+ggplot(data = data1[!is.na(data1[1:data_length,]$FamilySize),],aes(x=FamilySize,fill=Survived))+geom_histogram(binwidth =1,position="fill")+ylab("Prawdopodobieństwo")+scale_fill_manual(values=c("#cc1d1d", "#35a608"))
+```
+
+Z trzeciego wykresu można odczytać, że rodziny składające się z 2 do 4 osób mają więcej niż 50% szans na ratunek.
+
+Przyjrzyjmy się teraz atrybutowi Fare.
+
+```{r fare_survived_plot}
+library("ggplot2")
+ggplot(data = data[1:data_length,],aes(x=Fare,fill=Survived))+ylab("Prawdopodobieństwo")+geom_histogram(binwidth =20, position="fill")+scale_fill_manual(values=c("#cc1d1d", "#35a608"))
+```
+Wykres wskazuje, że czym większa opłata za bilet, tym większa szansa na ratunek.
+
+Ostatnim atrybutem, który może wpływać na wartość `Survive` jest tytuł pasażera, który można odczytać z jego nazwy. W tym celu separuje tytuł i dodaje go do nowej kolumny:
+
+```{r title_survived_plot}
+library("ggplot2")
+data$Title <- gsub('(.*, )|(\\..*)', '', data$Name)
+data$Title[data$Title == 'Mlle']<- 'Miss' 
+data$Title[data$Title == 'Ms']<- 'Miss'
+data$Title[data$Title == 'Mme']<- 'Mrs' 
+data$Title[data$Title == 'Lady']<- 'Miss'
+data$Title[data$Title == 'Dona']<- 'Miss'
+officer<- c('Capt','Col','Don','Dr','Jonkheer','Major','Rev','Sir','the Countess')
+data$Title[data$Title %in% officer]<-'Officer'
+
+data$Title<- as.factor(data$Title)
+ggplot(data = data[1:data_length,],aes(x=Title,fill=Survived))+geom_bar(position="fill")+ylab("Prawdopodobieństwo")+scale_fill_manual(values=c("#cc1d1d", "#35a608"))
+```
+Z wykresu można wywnioskować, że Panie miały największe szanse na przeżycie.
+
+## Podsumowanie i wnioski
+
+W powyższej analizie przebadano wpływ wszystkich potencjalnie znaczących atrybutów mających wpływ na wartość atrybutu decyzyjnego. Pokazuje ona jednoznacznie, że w zbiorze istnieją atrybuty, które mają wpływ na wartość atrybutu decyzyjnego. Są też takie, które nie mają większego znaczenia. Z pewnością płeć pasażera jest znacząca - kobiety zdecydowanie częściej były ratowane. Z danych wynika również że pasażerowie klasy pierwszej byli najczęściej ratowani. Podobnie atrybuty `Fare`, rozmiar rodziny, oraz tytuł pasażera mają mniejszy lub większy wpływ na atrybut decyzyjny. Pozostałe atrybuty raczej nie są znaczące dla wartości atrybutu decyzyjnego.
